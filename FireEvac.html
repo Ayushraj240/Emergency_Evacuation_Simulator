@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>EVAC — Emergency Evacuation Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root {
+  --red: #ff1a1a; --amber: #ff8c00; --cyan: #00e5ff;
+  --green: #00ff88; --bg: #06080c; --panel: rgba(6,10,16,0.95);
+  --border: rgba(0,229,255,0.15); --text: #b8cfe0;
+  --mono: 'Share Tech Mono', monospace; --head: 'Barlow Condensed', sans-serif;
+  --orb: 'Orbitron', sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);cursor:crosshair}
+canvas{display:block;position:absolute;top:0;left:0}
+#bgCanvas{z-index:0}
+#simCanvas{z-index:1}
+
+/* ── SIREN FLASH ── */
+#sirenFlash{
+  position:fixed;inset:0;z-index:2;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 0%,rgba(255,30,30,0.18) 0%,transparent 65%);
+  opacity:0;animation:sirenPulse 1.1s ease-in-out infinite;
+}
+@keyframes sirenPulse{0%,100%{opacity:0}50%{opacity:1}}
+
+/* ── SCANLINE ── */
+#scanline{
+  position:fixed;inset:0;z-index:3;pointer-events:none;
+  background:repeating-linear-gradient(to bottom,transparent 0px,transparent 2px,rgba(0,0,0,0.13) 2px,rgba(0,0,0,0.13) 4px);
+}
+
+/* ── HUD ── */
+#hud{position:fixed;inset:0;z-index:10;pointer-events:none}
+
+/* MAIN PANEL */
+#panel{
+  position:absolute;top:20px;left:20px;width:270px;
+  background:var(--panel);
+  border:1px solid var(--border);
+  padding:18px 18px 14px;
+  pointer-events:all;
+  clip-path:polygon(0 0,calc(100% - 14px) 0,100% 14px,100% 100%,14px 100%,0 calc(100% - 14px));
+  box-shadow:0 0 0 1px rgba(0,229,255,0.07),0 20px 60px rgba(0,0,0,0.8),inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.logo-row{display:flex;align-items:baseline;gap:8px;margin-bottom:2px}
+.logo{font-family:var(--orb);font-size:22px;font-weight:900;color:var(--cyan);letter-spacing:4px}
+.logo-ver{font-family:var(--mono);font-size:10px;color:rgba(0,229,255,0.4);letter-spacing:2px}
+.logo-sub{font-family:var(--mono);font-size:9px;color:rgba(255,255,255,0.2);letter-spacing:3px;margin-bottom:14px;text-transform:uppercase}
+
+.field{margin-bottom:10px}
+.field label{font-family:var(--mono);font-size:9px;letter-spacing:2px;color:rgba(180,210,240,0.35);display:block;margin-bottom:4px;text-transform:uppercase}
+select,input[type=range]{width:100%;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);color:var(--text);padding:7px 10px;font-family:var(--mono);font-size:11px;outline:none;cursor:pointer;appearance:none;border-radius:2px}
+select:hover,select:focus{border-color:rgba(0,229,255,0.4);background:rgba(0,229,255,0.04)}
+input[type=range]{-webkit-appearance:none;height:3px;border:none;padding:0;background:rgba(255,255,255,0.08)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;background:var(--cyan);border-radius:50%;cursor:pointer;box-shadow:0 0 10px rgba(0,229,255,0.8)}
+
+.divider{border:none;border-top:1px solid rgba(255,255,255,0.06);margin:12px 0}
+
+.btn{
+  display:block;width:100%;font-family:var(--head);font-weight:900;font-size:14px;
+  letter-spacing:3px;text-transform:uppercase;border:none;padding:10px;
+  cursor:pointer;transition:all 0.15s;margin-bottom:7px;pointer-events:all;
+  clip-path:polygon(0 0,calc(100%-8px) 0,100% 8px,100% 100%,8px 100%,0 calc(100%-8px));
+}
+.btn-primary{background:linear-gradient(90deg,#00e5ff,#0099bb);color:#030810}
+.btn-primary:hover{filter:brightness(1.2);box-shadow:0 0 30px rgba(0,229,255,0.5)}
+.btn-danger{background:linear-gradient(90deg,#ff3333,#cc0000);color:#fff}
+.btn-danger:hover{filter:brightness(1.2);box-shadow:0 0 30px rgba(255,0,0,0.4)}
+.btn-ghost{background:transparent;color:rgba(180,200,220,0.5);border:1px solid rgba(255,255,255,0.1);clip-path:none}
+.btn-ghost:hover{color:var(--cyan);border-color:var(--cyan)}
+
+/* TELEMETRY */
+#telem{
+  position:absolute;top:20px;right:20px;width:200px;
+  background:var(--panel);border:1px solid var(--border);padding:14px;
+  clip-path:polygon(14px 0,100% 0,100% calc(100%-14px),calc(100%-14px) 100%,0 100%,0 14px);
+}
+.telem-title{font-family:var(--orb);font-size:10px;font-weight:700;color:var(--cyan);letter-spacing:3px;margin-bottom:12px;opacity:0.7}
+.trow{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;font-family:var(--mono);font-size:10px}
+.trow .lbl{color:rgba(180,200,220,0.35);letter-spacing:1px}
+.trow .val{color:var(--cyan);font-weight:bold}
+.trow.fire .val{color:var(--red);animation:blink 0.7s infinite}
+.trow.safe .val{color:var(--green)}
+.trow.warn .val{color:var(--amber)}
+
+/* AUDIO PANEL */
+#audioPnl{
+  position:absolute;bottom:52px;right:20px;width:200px;
+  background:var(--panel);border:1px solid var(--border);padding:14px;
+}
+.audio-title{font-family:var(--mono);font-size:9px;color:rgba(0,229,255,0.4);letter-spacing:2px;margin-bottom:10px;text-transform:uppercase}
+.audio-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;font-family:var(--mono);font-size:10px;color:rgba(180,200,220,0.5)}
+.audio-row input[type=range]{width:100px;height:3px}
+.vu{display:flex;gap:2px;align-items:flex-end;height:16px;margin-top:4px}
+.vu-bar{width:4px;background:rgba(0,229,255,0.2);border-radius:1px;transition:height 0.05s}
+
+/* MINIMAP */
+#minimap{
+  position:absolute;bottom:52px;left:20px;
+  background:rgba(6,10,16,0.97);border:1px solid var(--border);padding:10px;
+}
+#minimapCanvas{display:block}
+.minimap-title{font-family:var(--mono);font-size:9px;color:rgba(0,229,255,0.4);letter-spacing:2px;margin-bottom:6px;text-transform:uppercase}
+
+/* TICKER */
+#ticker{
+  position:fixed;bottom:0;left:0;right:0;height:36px;z-index:11;
+  background:rgba(200,10,10,0.1);border-top:1px solid rgba(255,30,30,0.3);
+  display:flex;align-items:center;overflow:hidden;pointer-events:none;
+}
+.tlbl{font-family:var(--head);font-weight:900;font-size:14px;letter-spacing:3px;color:var(--red);
+  padding:0 14px;white-space:nowrap;border-right:1px solid rgba(255,30,30,0.3);height:100%;display:flex;align-items:center}
+#tickText{font-family:var(--mono);font-size:10px;color:rgba(255,80,80,0.65);letter-spacing:2px;padding-left:20px;
+  animation:scroll 22s linear infinite;white-space:nowrap}
+@keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+
+/* STATUS */
+#status{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  display:none;text-align:center;pointer-events:none;z-index:20;animation:fadeUp 0.5s ease
+}
+#status h1{font-family:var(--orb);font-size:58px;font-weight:900;letter-spacing:6px;text-transform:uppercase}
+#status p{font-family:var(--mono);font-size:11px;opacity:0.4;margin-top:12px;letter-spacing:3px}
+@keyframes fadeUp{from{opacity:0;transform:translate(-50%,-60%)}to{opacity:1;transform:translate(-50%,-50%)}}
+
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+
+/* AUDIO MUTE BTN */
+#muteBtn{
+  position:absolute;top:14px;right:14px;width:28px;height:28px;
+  background:transparent;border:1px solid rgba(0,229,255,0.3);
+  color:var(--cyan);font-size:14px;cursor:pointer;pointer-events:all;
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);transition:all 0.2s;border-radius:2px;
+}
+#muteBtn:hover{background:rgba(0,229,255,0.1)}
+
+/* COMPASS */
+#compass{
+  position:absolute;bottom:52px;left:50%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:10px;color:rgba(0,229,255,0.3);letter-spacing:3px;
+  pointer-events:none;text-align:center
+}
+</style>
+</head>
+<body>
+
+<canvas id="bgCanvas"></canvas>
+<canvas id="simCanvas"></canvas>
+<div id="sirenFlash"></div>
+<div id="scanline"></div>
+
+<div id="hud">
+  <!-- PANEL -->
+  <div id="panel">
+    <button id="muteBtn" onclick="toggleMute()" title="Toggle Audio">🔊</button>
+    <div class="logo-row"><span class="logo">EVAC</span><span class="logo-ver">v3.0</span></div>
+    <div class="logo-sub">Emergency Response Simulator</div>
+
+    <div class="field"><label>Building Layout</label>
+      <select id="mapType">
+        <option value="mall">High-Traffic Mall</option>
+        <option value="office">Office Complex</option>
+        <option value="hospital">Hospital Wing</option>
+        <option value="maze">Irregular Maze</option>
+      </select>
+    </div>
+    <div class="field"><label>Algorithm</label>
+      <select id="algo">
+        <option value="astar">A* Heuristic (Smart)</option>
+        <option value="bfs">BFS Breadth-First</option>
+      </select>
+    </div>
+    <div class="field"><label>Speed — <span id="spVal">10</span></label>
+      <input type="range" id="speed" min="1" max="20" value="10" oninput="document.getElementById('spVal').textContent=this.value">
+    </div>
+    <div class="field"><label>HVAC Wind</label>
+      <select id="wind"><option value="none">No Wind</option><option value="N">↑ North</option><option value="S">↓ South</option><option value="E">→ East</option><option value="W">← West</option></select>
+    </div>
+    <div class="field"><label>Fire Intensity</label>
+      <select id="intensity"><option value="low">Low</option><option value="med" selected>Medium</option><option value="high">High — Inferno</option></select>
+    </div>
+    <hr class="divider">
+    <button class="btn btn-primary" onclick="initSim()">▶ START EVACUATION</button>
+    <button class="btn btn-danger" onclick="placeFire()" id="fireBtn" disabled>🔥 DROP FIRE</button>
+    <button class="btn btn-ghost" onclick="resetSim()">⟳ HARD RESET</button>
+  </div>
+
+  <!-- TELEMETRY -->
+  <div id="telem">
+    <div class="telem-title">LIVE TELEMETRY</div>
+    <div class="trow" id="t-time"><span class="lbl">ELAPSED</span><span class="val">0.0s</span></div>
+    <div class="trow" id="t-fire"><span class="lbl">FIRE CELLS</span><span class="val">0</span></div>
+    <div class="trow" id="t-smoke"><span class="lbl">SMOKE CELLS</span><span class="val">0</span></div>
+    <div class="trow" id="t-steps"><span class="lbl">STEPS LEFT</span><span class="val">—</span></div>
+    <div class="trow" id="t-status"><span class="lbl">STATUS</span><span class="val">STANDBY</span></div>
+    <hr style="border:none;border-top:1px solid rgba(255,255,255,0.06);margin:10px 0">
+    <div class="audio-title">AUDIO LEVELS</div>
+    <div class="vu" id="vuMeter">
+      <div class="vu-bar" id="vb0" style="height:4px"></div>
+      <div class="vu-bar" id="vb1" style="height:6px"></div>
+      <div class="vu-bar" id="vb2" style="height:10px"></div>
+      <div class="vu-bar" id="vb3" style="height:14px"></div>
+      <div class="vu-bar" id="vb4" style="height:10px"></div>
+      <div class="vu-bar" id="vb5" style="height:6px"></div>
+      <div class="vu-bar" id="vb6" style="height:4px"></div>
+      <div class="vu-bar" id="vb7" style="height:8px"></div>
+    </div>
+  </div>
+
+  <!-- MINIMAP -->
+  <div id="minimap">
+    <div class="minimap-title">FLOOR PLAN</div>
+    <canvas id="minimapCanvas" width="154" height="154"></canvas>
+  </div>
+
+  <!-- TICKER -->
+  <div id="ticker">
+    <div class="tlbl">⚠ ALERT</div>
+    <div id="tickText">
+      EMERGENCY — FIRE DETECTED SECTOR 3 — INITIATE EVACUATION PROTOCOL OMEGA — ALL PERSONNEL EVACUATE IMMEDIATELY — DO NOT USE ELEVATORS — PROCEED TO NEAREST EXIT — EMERGENCY — FIRE DETECTED SECTOR 3 — INITIATE EVACUATION PROTOCOL OMEGA — ALL PERSONNEL EVACUATE IMMEDIATELY — DO NOT USE ELEVATORS — PROCEED TO NEAREST EXIT —
+    </div>
+  </div>
+
+  <div id="status"></div>
+</div>
+
+<script>
+// ══════════════════════════════════════════
+//  AUDIO ENGINE
+// ══════════════════════════════════════════
+let audioCtx = null;
+let muted = false;
+let sirenNodes = {};
+let fireNodes = {};
+let masterGain;
+
+function initAudio() {
+  if (audioCtx) return;
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  masterGain = audioCtx.createGain();
+  masterGain.gain.value = 0.7;
+  masterGain.connect(audioCtx.destination);
+}
+
+function toggleMute() {
+  muted = !muted;
+  document.getElementById('muteBtn').textContent = muted ? '🔇' : '🔊';
+  if (masterGain) masterGain.gain.value = muted ? 0 : 0.7;
+}
+
+/* ── SIREN ── */
+function startSiren() {
+  if (!audioCtx || sirenNodes.started) return;
+  sirenNodes.started = true;
+
+  // Two-tone wail: woo-wee
+  const freqs = [880, 660];
+  const now = audioCtx.currentTime;
+  const gainNode = audioCtx.createGain();
+  gainNode.gain.value = 0.18;
+  gainNode.connect(masterGain);
+  sirenNodes.gain = gainNode;
+
+  const osc1 = audioCtx.createOscillator();
+  osc1.type = 'sawtooth';
+  osc1.frequency.value = freqs[0];
+
+  // LFO for the wail sweep
+  const lfo = audioCtx.createOscillator();
+  lfo.type = 'sine';
+  lfo.frequency.value = 0.45;
+  const lfoGain = audioCtx.createGain();
+  lfoGain.gain.value = 200;
+  lfo.connect(lfoGain);
+  lfoGain.connect(osc1.frequency);
+
+  // Distortion for urgency
+  const distortion = audioCtx.createWaveShaper();
+  distortion.curve = makeDistortionCurve(15);
+  distortion.oversample = '2x';
+
+  osc1.connect(distortion);
+  distortion.connect(gainNode);
+
+  // Second oscillator slightly detuned
+  const osc2 = audioCtx.createOscillator();
+  osc2.type = 'square';
+  osc2.frequency.value = freqs[1];
+  const lfo2 = audioCtx.createOscillator();
+  lfo2.type = 'sine';
+  lfo2.frequency.value = 0.5;
+  const lfoGain2 = audioCtx.createGain();
+  lfoGain2.gain.value = 180;
+  lfo2.connect(lfoGain2);
+  lfoGain2.connect(osc2.frequency);
+  const g2 = audioCtx.createGain();
+  g2.gain.value = 0.1;
+  osc2.connect(g2);
+  g2.connect(masterGain);
+
+  // Amplitude pulsing
+  gainNode.gain.setValueAtTime(0, now);
+  for(let i = 0; i < 60; i++) {
+    gainNode.gain.linearRampToValueAtTime(0.2, now + i*1.1 + 0.5);
+    gainNode.gain.linearRampToValueAtTime(0.08, now + i*1.1 + 1.1);
+  }
+
+  osc1.start(); osc2.start(); lfo.start(); lfo2.start();
+  sirenNodes = { osc1, osc2, lfo, lfo2, gainNode, g2, lfoGain, lfoGain2, distortion, started: true };
+}
+
+function stopSiren() {
+  if (!sirenNodes.started) return;
+  try {
+    sirenNodes.osc1.stop(); sirenNodes.osc2.stop();
+    sirenNodes.lfo.stop(); sirenNodes.lfo2.stop();
+  } catch(e) {}
+  sirenNodes = {};
+}
+
+/* ── FIRE CRACKLE ── */
+function startFireCrackle() {
+  if (!audioCtx || fireNodes.started) return;
+  fireNodes.started = true;
+
+  // White noise buffer
+  const bufLen = audioCtx.sampleRate * 4;
+  const buf = audioCtx.createBuffer(1, bufLen, audioCtx.sampleRate);
+  const data = buf.getChannelData(0);
+  for(let i = 0; i < bufLen; i++) data[i] = Math.random()*2-1;
+
+  const noise = audioCtx.createBufferSource();
+  noise.buffer = buf; noise.loop = true;
+
+  // Low-pass filter for crackle character
+  const lp = audioCtx.createBiquadFilter();
+  lp.type = 'lowpass'; lp.frequency.value = 400;
+
+  // Bandpass for hiss
+  const bp = audioCtx.createBiquadFilter();
+  bp.type = 'bandpass'; bp.frequency.value = 2200; bp.Q.value = 0.5;
+
+  const crackleGain = audioCtx.createGain();
+  crackleGain.gain.value = 0.08;
+  const hissGain = audioCtx.createGain();
+  hissGain.gain.value = 0.03;
+
+  // Amplitude modulation for crackle pops
+  const modOsc = audioCtx.createOscillator();
+  modOsc.type = 'sine'; modOsc.frequency.value = 8;
+  const modGain = audioCtx.createGain();
+  modGain.gain.value = 0.04;
+  modOsc.connect(modGain);
+  modGain.connect(crackleGain.gain);
+
+  noise.connect(lp); lp.connect(crackleGain); crackleGain.connect(masterGain);
+  noise.connect(bp); bp.connect(hissGain); hissGain.connect(masterGain);
+  modOsc.start(); noise.start();
+  fireNodes = { noise, lp, bp, crackleGain, hissGain, modOsc, modGain, started: true };
+}
+
+function stopFireCrackle() {
+  if (!fireNodes.started) return;
+  try { fireNodes.noise.stop(); fireNodes.modOsc.stop(); } catch(e) {}
+  fireNodes = {};
+}
+
+/* ── ALARM BEEP ── */
+function playAlarmBeep() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  const osc = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  osc.type = 'square'; osc.frequency.value = 2400;
+  g.gain.setValueAtTime(0.12, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+  osc.connect(g); g.connect(masterGain);
+  osc.start(t); osc.stop(t + 0.12);
+
+  const osc2 = audioCtx.createOscillator();
+  const g2 = audioCtx.createGain();
+  osc2.type = 'square'; osc2.frequency.value = 2800;
+  g2.gain.setValueAtTime(0.08, t + 0.14);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+  osc2.connect(g2); g2.connect(masterGain);
+  osc2.start(t + 0.14); osc2.stop(t + 0.26);
+}
+
+/* ── PA ANNOUNCEMENT ── */
+function playPAVoice(text) {
+  if (!window.speechSynthesis || muted) return;
+  speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate = 0.85; utt.pitch = 0.8; utt.volume = 0.7;
+  // Pick a robotic-ish voice if available
+  const voices = speechSynthesis.getVoices();
+  const robotVoice = voices.find(v => v.name.includes('Google UK English Male') || v.name.includes('Microsoft David') || v.name.includes('en-GB'));
+  if (robotVoice) utt.voice = robotVoice;
+  speechSynthesis.speak(utt);
+}
+
+/* ── SUCCESS / FAIL SOUNDS ── */
+function playSuccess() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.0, t + i*0.12);
+    g.gain.linearRampToValueAtTime(0.18, t + i*0.12 + 0.05);
+    g.gain.exponentialRampToValueAtTime(0.001, t + i*0.12 + 0.5);
+    o.connect(g); g.connect(masterGain);
+    o.start(t + i*0.12); o.stop(t + i*0.12 + 0.6);
+  });
+}
+
+function playFail() {
+  if (!audioCtx) return;
+  const t = audioCtx.currentTime;
+  [220, 180, 150].forEach((freq, i) => {
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = 'sawtooth'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0.25, t + i*0.25);
+    g.gain.exponentialRampToValueAtTime(0.001, t + i*0.25 + 0.4);
+    o.connect(g); g.connect(masterGain);
+    o.start(t + i*0.25); o.stop(t + i*0.25 + 0.4);
+  });
+}
+
+function makeDistortionCurve(amount) {
+  const n = 256, curve = new Float32Array(n);
+  for(let i=0;i<n;i++){const x=i*2/n-1;curve[i]=x===0?0:(Math.PI+amount)*x/(Math.PI+amount*Math.abs(x));}
+  return curve;
+}
+
+// ══════════════════════════════════════════
+//  CANVAS + STATE
+// ══════════════════════════════════════════
+const bgCanvas = document.getElementById('bgCanvas');
+const simCanvas = document.getElementById('simCanvas');
+const mmCanvas  = document.getElementById('minimapCanvas');
+const ctx    = simCanvas.getContext('2d');
+const bgCtx  = bgCanvas.getContext('2d');
+const mmCtx  = mmCanvas.getContext('2d');
+
+let W, H;
+function resize(){
+  W = bgCanvas.width = simCanvas.width = window.innerWidth;
+  H = bgCanvas.height = simCanvas.height = window.innerHeight;
+  camX = W/2 - 30; camY = 130;
+  drawBg();
+}
+
+const GRID=22, TW=54, TH=27, WH=46;
+let camX=0, camY=130;
+let isDrag=false, lastM={x:0,y:0};
+let grid=[], fire=new Set(), smoke=new Map(), embers=[];
+let path=[], agent={r:1,c:1,walkCycle:0};
+const GOAL={r:20,c:20};
+let running=false, frameCount=0, startTime=0;
+let particles=[];
+let alarmInterval=null;
+let sirenFlashOn=false;
+let paFired=false;
+
+// ══════════════════════════════════════════
+//  BACKGROUND
+// ══════════════════════════════════════════
+function drawBg(){
+  bgCtx.fillStyle='#06080c'; bgCtx.fillRect(0,0,W,H);
+  // Grid
+  bgCtx.strokeStyle='rgba(0,229,255,0.022)'; bgCtx.lineWidth=1;
+  for(let x=0;x<W;x+=64){bgCtx.beginPath();bgCtx.moveTo(x,0);bgCtx.lineTo(x,H);bgCtx.stroke();}
+  for(let y=0;y<H;y+=64){bgCtx.beginPath();bgCtx.moveTo(0,y);bgCtx.lineTo(W,y);bgCtx.stroke();}
+  // Vignette
+  const vg=bgCtx.createRadialGradient(W/2,H/2,H*0.1,W/2,H/2,H);
+  vg.addColorStop(0,'rgba(0,0,0,0)'); vg.addColorStop(1,'rgba(0,0,0,0.75)');
+  bgCtx.fillStyle=vg; bgCtx.fillRect(0,0,W,H);
+}
+
+// ══════════════════════════════════════════
+//  ISO UTILS
+// ══════════════════════════════════════════
+function toIso(r,c){return{x:(r-c)*(TW/2)+camX, y:(r+c)*(TH/2)+camY};}
+
+// ══════════════════════════════════════════
+//  MAPS
+// ══════════════════════════════════════════
+function createMap(type){
+  grid=Array.from({length:GRID},()=>Array(GRID).fill(0));
+  for(let i=0;i<GRID;i++) grid[0][i]=grid[GRID-1][i]=grid[i][0]=grid[i][GRID-1]=1;
+
+  if(type==='mall'){
+    for(let r=4;r<GRID-4;r+=4) for(let c=2;c<GRID-2;c++) if(c%6!==0&&c%6!==3) grid[r][c]=1;
+    [4,8,12,16].forEach(r=>{grid[r][9]=0;grid[r][15]=0;});
+  } else if(type==='office'){
+    for(let r=2;r<GRID-2;r+=3) for(let c=2;c<GRID-2;c+=3){grid[r][c]=1;if(c+1<GRID-1)grid[r][c+1]=1;}
+  } else if(type==='hospital'){
+    for(let c=2;c<GRID-2;c++){grid[7][c]=1;grid[14][c]=1;}
+    for(let r=1;r<7;r++) for(let c=2;c<GRID-2;c+=5) grid[r][c]=1;
+    for(let r=8;r<14;r++) for(let c=2;c<GRID-2;c+=5) grid[r][c]=1;
+    for(let r=15;r<GRID-1;r++) for(let c=2;c<GRID-2;c+=5) grid[r][c]=1;
+    [7,14].forEach(r=>{for(let c=3;c<GRID-2;c+=5)grid[r][c]=0;});
+  } else {
+    for(let i=0;i<60;i++){
+      const r=1+Math.floor(Math.random()*(GRID-2)), c=1+Math.floor(Math.random()*(GRID-2));
+      if((r===1&&c===1)||(r===GOAL.r&&c===GOAL.c)) continue;
+      grid[r][c]=1;
+    }
+  }
+  grid[1][1]=0; grid[GOAL.r][GOAL.c]=0;
+}
+
+// ══════════════════════════════════════════
+//  DRAWING
+// ══════════════════════════════════════════
+function drawFloor(x, y, r, c){
+  const isGoal=(r===GOAL.r&&c===GOAL.c);
+  const inFire=fire.has(`${r},${c}`);
+  const sk=(smoke.get(`${r},${c}`)||0);
+  const isPath=path.some(([pr,pc])=>pr===r&&pc===c);
+
+  ctx.beginPath();
+  ctx.moveTo(x,y-TH/2); ctx.lineTo(x+TW/2,y); ctx.lineTo(x,y+TH/2); ctx.lineTo(x-TW/2,y); ctx.closePath();
+
+  if(isGoal){
+    const g=ctx.createLinearGradient(x-TW/2,y,x+TW/2,y);
+    g.addColorStop(0,'#002b33'); g.addColorStop(1,'#004455');
+    ctx.fillStyle=g;
+  } else if(inFire){
+    ctx.fillStyle='#120500';
+  } else {
+    const b=12+((r+c)%2)*4;
+    ctx.fillStyle=`rgb(${b},${b+2},${b+5})`;
+  }
+  ctx.fill();
+  ctx.strokeStyle=inFire?'#2a0800':'#0f1520'; ctx.lineWidth=0.6; ctx.stroke();
+
+  // Floor tile details (grout lines)
+  if(!inFire){
+    ctx.strokeStyle=`rgba(255,255,255,0.02)`; ctx.lineWidth=0.3;
+    ctx.beginPath(); ctx.moveTo(x-TW/4,y-TH/4); ctx.lineTo(x+TW/4,y-TH/4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x,y-TH/2); ctx.lineTo(x,y+TH/2); ctx.stroke();
+  }
+
+  if(isPath && !inFire){
+    ctx.beginPath();
+    ctx.moveTo(x,y-TH/2); ctx.lineTo(x+TW/2,y); ctx.lineTo(x,y+TH/2); ctx.lineTo(x-TW/2,y); ctx.closePath();
+    ctx.fillStyle='rgba(0,255,136,0.09)'; ctx.fill();
+    // dotted path arrow
+    ctx.fillStyle='rgba(0,255,136,0.25)';
+    ctx.beginPath(); ctx.arc(x,y,2.5,0,Math.PI*2); ctx.fill();
+  }
+
+  if(sk>0){
+    ctx.beginPath();
+    ctx.moveTo(x,y-TH/2); ctx.lineTo(x+TW/2,y); ctx.lineTo(x,y+TH/2); ctx.lineTo(x-TW/2,y); ctx.closePath();
+    ctx.fillStyle=`rgba(80,85,95,${Math.min(0.75,sk*0.1)})`; ctx.fill();
+  }
+}
+
+function drawWall(x, y, r, c){
+  const h=WH;
+  const inFire=fire.has(`${r},${c}`);
+  const sk=smoke.get(`${r},${c}`)||0;
+
+  // Subtle variation per tile
+  const shade = ((r*7+c*3)%8)*2;
+
+  // Left face
+  ctx.fillStyle=`rgb(${22+shade},${32+shade},${48+shade})`;
+  ctx.beginPath();
+  ctx.moveTo(x,y+TH/2); ctx.lineTo(x-TW/2,y); ctx.lineTo(x-TW/2,y-h); ctx.lineTo(x,y+TH/2-h); ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=0.5; ctx.stroke();
+
+  // Right face
+  ctx.fillStyle=`rgb(${30+shade},${42+shade},${62+shade})`;
+  ctx.beginPath();
+  ctx.moveTo(x,y+TH/2); ctx.lineTo(x+TW/2,y); ctx.lineTo(x+TW/2,y-h); ctx.lineTo(x,y+TH/2-h); ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.stroke();
+
+  // Top face
+  ctx.fillStyle=`rgb(${40+shade},${55+shade},${75+shade})`;
+  ctx.beginPath();
+  ctx.moveTo(x,y+TH/2-h); ctx.lineTo(x+TW/2,y-h); ctx.lineTo(x,y-TH/2-h); ctx.lineTo(x-TW/2,y-h); ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,0.07)'; ctx.stroke();
+
+  // Wall edge highlight
+  ctx.strokeStyle='rgba(100,150,200,0.08)'; ctx.lineWidth=0.7;
+  ctx.beginPath(); ctx.moveTo(x,y+TH/2-h); ctx.lineTo(x,y-TH/2-h); ctx.stroke();
+
+  // Window (on right face, every few tiles)
+  if((r+c)%3===0){
+    const wx=x+TW*0.28, wy=y-h*0.52;
+    const ww=10, wh=9;
+    // Window frame
+    ctx.fillStyle='rgba(0,0,0,0.6)'; ctx.fillRect(wx-ww/2,wy-wh/2,ww,wh);
+    // Glass with fire glow or normal light
+    const glowClr=inFire ? 'rgba(255,120,30,0.35)' : 'rgba(255,220,120,0.07)';
+    ctx.fillStyle=glowClr; ctx.fillRect(wx-ww/2+1,wy-wh/2+1,ww-2,wh-2);
+    if(inFire){ctx.shadowBlur=14; ctx.shadowColor='rgba(255,80,0,0.8)';}
+    // Cross pane
+    ctx.strokeStyle=`rgba(80,120,180,0.4)`; ctx.lineWidth=0.5;
+    ctx.beginPath(); ctx.moveTo(wx,wy-wh/2); ctx.lineTo(wx,wy+wh/2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(wx-ww/2,wy); ctx.lineTo(wx+ww/2,wy); ctx.stroke();
+    ctx.shadowBlur=0;
+  }
+
+  // Smoke tint on wall
+  if(sk>3){
+    ctx.globalAlpha=Math.min(0.4,sk*0.06);
+    ctx.fillStyle='#555';
+    ctx.beginPath();
+    ctx.moveTo(x,y+TH/2); ctx.lineTo(x+TW/2,y); ctx.lineTo(x+TW/2,y-h); ctx.lineTo(x,y+TH/2-h); ctx.closePath();
+    ctx.fill();
+    ctx.globalAlpha=1;
+  }
+}
+
+function drawFireTile(x, y){
+  const t=frameCount*0.04;
+  const flicker=0.82+0.18*Math.sin(t*9+x*0.3);
+  const h2=18+12*flicker;
+
+  ctx.shadowBlur=35; ctx.shadowColor='rgba(255,80,0,0.7)';
+
+  // Left lick
+  const lg1=ctx.createLinearGradient(x,y,x-TW/2,y-h2);
+  lg1.addColorStop(0,'#8b1000'); lg1.addColorStop(0.5,'#dd4400'); lg1.addColorStop(1,'#ff9900');
+  ctx.fillStyle=lg1;
+  ctx.beginPath();
+  ctx.moveTo(x,y+TH/2); ctx.lineTo(x-TW/2,y); ctx.lineTo(x-TW/2,y-h2); ctx.lineTo(x,y+TH/2-h2); ctx.closePath();
+  ctx.fill();
+
+  // Right lick
+  const lg2=ctx.createLinearGradient(x,y,x+TW/2,y-h2);
+  lg2.addColorStop(0,'#661000'); lg2.addColorStop(0.5,'#ff4400'); lg2.addColorStop(1,'#ffbb00');
+  ctx.fillStyle=lg2;
+  ctx.beginPath();
+  ctx.moveTo(x,y+TH/2); ctx.lineTo(x+TW/2,y); ctx.lineTo(x+TW/2,y-h2); ctx.lineTo(x,y+TH/2-h2); ctx.closePath();
+  ctx.fill();
+
+  // Top bright core
+  ctx.fillStyle='#ffee66';
+  ctx.beginPath();
+  ctx.moveTo(x,y+TH/2-h2); ctx.lineTo(x+TW/2,y-h2); ctx.lineTo(x,y-TH/2-h2); ctx.lineTo(x-TW/2,y-h2); ctx.closePath();
+  ctx.fill();
+
+  // Inner hot core
+  ctx.globalAlpha=0.6;
+  ctx.fillStyle='#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(x, y-h2+TH/4, TW*0.2, TH*0.3, 0, 0, Math.PI*2);
+  ctx.fill();
+  ctx.globalAlpha=1;
+
+  ctx.shadowBlur=0;
+}
+
+function drawGoal(x, y){
+  const t=frameCount*0.03;
+  const pulse=0.5+0.5*Math.sin(t);
+
+  // Animated beacon ring
+  ctx.save();
+  ctx.shadowBlur=40; ctx.shadowColor=`rgba(0,229,255,${pulse*0.8})`;
+  ctx.strokeStyle=`rgba(0,229,255,${0.4+0.6*pulse})`;
+  ctx.lineWidth=2;
+  ctx.beginPath();
+  ctx.moveTo(x,y-TH/2-3); ctx.lineTo(x+TW/2+3,y); ctx.lineTo(x,y+TH/2+3); ctx.lineTo(x-TW/2-3,y); ctx.closePath();
+  ctx.stroke();
+
+  // Second ring
+  ctx.globalAlpha=0.3*pulse;
+  ctx.strokeStyle='rgba(0,255,136,1)';
+  ctx.lineWidth=5;
+  ctx.beginPath();
+  ctx.moveTo(x,y-TH/2-7); ctx.lineTo(x+TW/2+7,y); ctx.lineTo(x,y+TH/2+7); ctx.lineTo(x-TW/2-7,y); ctx.closePath();
+  ctx.stroke();
+  ctx.globalAlpha=1;
+  ctx.shadowBlur=0;
+  ctx.restore();
+
+  // EXIT sign
+  ctx.font=`bold 9px 'Share Tech Mono'`;
+  ctx.textAlign='center';
+  ctx.shadowBlur=10; ctx.shadowColor='rgba(0,229,255,0.8)';
+  ctx.fillStyle=`rgba(0,229,255,${0.6+0.4*pulse})`;
+  ctx.fillText('EXIT', x, y-WH-14);
+  ctx.shadowBlur=0;
+
+  // Arrow
+  ctx.fillStyle=`rgba(0,255,136,${0.5+0.5*pulse})`;
+  ctx.font='12px monospace';
+  ctx.fillText('▼', x, y-WH-4);
+}
+
+function drawAgent(x, y){
+  const t=agent.walkCycle;
+  const bob=Math.sin(t*2.5)*3;
+  const py=y-WH-4;
+  const sk=smoke.get(`${Math.round(agent.r)},${Math.round(agent.c)}`)||0;
+
+  ctx.save();
+  ctx.translate(x, py+bob);
+
+  // Shadow ellipse
+  ctx.beginPath();
+  ctx.ellipse(0, 6, 9, 4.5, 0, 0, Math.PI*2);
+  ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fill();
+
+  // Legs
+  const ls=Math.sin(t*2.5)*9;
+  const legColor='#e07820';
+  ctx.strokeStyle=legColor; ctx.lineWidth=3; ctx.lineCap='round';
+  // Left leg
+  ctx.beginPath(); ctx.moveTo(-1,0); ctx.lineTo(-5+ls/2, 13); ctx.stroke();
+  // Right leg
+  ctx.beginPath(); ctx.moveTo(1,0); ctx.lineTo(5-ls/2, 13); ctx.stroke();
+  // Boots
+  ctx.fillStyle='#2a1a0a';
+  ctx.beginPath(); ctx.ellipse(-5+ls/2, 15, 5, 2.5, -0.3, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(5-ls/2, 15, 5, 2.5, 0.3, 0, Math.PI*2); ctx.fill();
+
+  // Body — hi-vis jacket
+  const bodyG=ctx.createLinearGradient(-7,-24,7,2);
+  bodyG.addColorStop(0,'#ff9900'); bodyG.addColorStop(0.5,'#dd7700'); bodyG.addColorStop(1,'#bb5500');
+  ctx.fillStyle=bodyG;
+  ctx.beginPath();
+  ctx.roundRect(-7,-24,14,22,4);
+  ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,0.3)'; ctx.lineWidth=0.5; ctx.stroke();
+
+  // Reflective stripes
+  ctx.fillStyle='rgba(255,255,255,0.55)';
+  ctx.fillRect(-7,-17,14,2.5);
+  ctx.fillRect(-7,-10,14,2.5);
+
+  // Arms
+  const as=Math.cos(t*2.5)*12;
+  ctx.strokeStyle='#dd7700'; ctx.lineWidth=3; ctx.lineCap='round';
+  ctx.beginPath(); ctx.moveTo(-7,-20); ctx.lineTo(-14+as/4,-10-as/5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(7,-20); ctx.lineTo(14-as/4,-10+as/5); ctx.stroke();
+  // Gloves
+  ctx.fillStyle='#333';
+  ctx.beginPath(); ctx.arc(-14+as/4,-10-as/5,3,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(14-as/4,-10+as/5,3,0,Math.PI*2); ctx.fill();
+
+  // Neck
+  ctx.fillStyle='#e8b87a';
+  ctx.beginPath(); ctx.roundRect(-3,-28,6,6,2); ctx.fill();
+
+  // Head
+  const headG=ctx.createRadialGradient(1,-33,1,0,-33,7);
+  headG.addColorStop(0,'#f0c888'); headG.addColorStop(1,'#c89050');
+  ctx.fillStyle=headG;
+  ctx.beginPath(); ctx.ellipse(0,-33,6.5,7,0,0,Math.PI*2); ctx.fill();
+
+  // Helmet
+  const helmG=ctx.createLinearGradient(-8,-42,8,-38);
+  helmG.addColorStop(0,'#cc2200'); helmG.addColorStop(0.5,'#ff3300'); helmG.addColorStop(1,'#991100');
+  ctx.fillStyle=helmG;
+  ctx.beginPath(); ctx.ellipse(0,-36,8,5.5,0,Math.PI,0); ctx.fill();
+  // Helmet brim
+  ctx.fillStyle='#991100';
+  ctx.beginPath(); ctx.ellipse(0,-38,10,2.5,0.1,Math.PI,0); ctx.fill();
+  // Helmet shine
+  ctx.fillStyle='rgba(255,255,255,0.25)';
+  ctx.beginPath(); ctx.ellipse(-2,-39,4,2,0.3,Math.PI*1.2,Math.PI*1.9); ctx.fill();
+
+  // Face: eyes
+  ctx.fillStyle='#2a1800';
+  ctx.beginPath(); ctx.ellipse(-2.2,-33,1.5,1.8,0,0,Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.ellipse(2.2,-33,1.5,1.8,0,0,Math.PI*2); ctx.fill();
+
+  // Breathing mask if smoky
+  if(sk>3){
+    ctx.fillStyle='rgba(150,200,150,0.7)';
+    ctx.beginPath(); ctx.roundRect(-4,-30,8,5,3); ctx.fill();
+    ctx.strokeStyle='rgba(100,160,100,0.9)'; ctx.lineWidth=0.5; ctx.stroke();
+  }
+
+  // Smoke distortion overlay
+  if(sk>2){
+    ctx.globalAlpha=Math.min(0.4,sk*0.06);
+    ctx.fillStyle='rgba(80,85,90,1)';
+    ctx.beginPath(); ctx.ellipse(0,-15,18,28,0,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=1;
+  }
+
+  ctx.restore();
+}
+
+// ══════════════════════════════════════════
+//  PARTICLES
+// ══════════════════════════════════════════
+function spawnFireParticles(x, y){
+  if(Math.random()>0.4) return;
+  const cols=['#ff4400','#ff8800','#ffcc00','#ff2200','#ff6600','#ffaa00'];
+  particles.push({
+    x:x+(Math.random()-0.5)*TW*0.5, y:y-WH-8,
+    vx:(Math.random()-0.5)*1.8, vy:-(1+Math.random()*3.5),
+    life:1, decay:0.02+Math.random()*0.03,
+    size:1.5+Math.random()*4,
+    color:cols[Math.floor(Math.random()*cols.length)],
+    type:'ember'
+  });
+}
+
+function spawnSmokeParticles(x, y, lvl){
+  if(Math.random()>0.07*Math.min(lvl,8)) return;
+  const grey=25+Math.floor(Math.random()*35);
+  particles.push({
+    x:x+(Math.random()-0.5)*30, y:y-WH-15,
+    vx:(Math.random()-0.5)*0.7, vy:-(0.35+Math.random()*0.9),
+    life:1, decay:0.004+Math.random()*0.007,
+    size:14+Math.random()*30,
+    color:`hsl(220,4%,${grey}%)`,
+    rot:Math.random()*Math.PI*2, rotSpeed:(Math.random()-0.5)*0.01,
+    type:'smoke'
+  });
+}
+
+function spawnEmber(x, y){
+  if(Math.random()>0.08) return;
+  particles.push({
+    x, y:y-WH,
+    vx:(Math.random()-0.5)*3, vy:-(1+Math.random()*4),
+    life:1, decay:0.015,
+    size:2, color:'#ffaa00', type:'floatEmber',
+    gravity:0.04
+  });
+}
+
+function updateParticles(){
+  for(let i=particles.length-1;i>=0;i--){
+    const p=particles[i];
+    p.x+=p.vx; p.y+=p.vy;
+    p.life-=p.decay;
+    if(p.type==='smoke'){p.size*=1.012; p.rot+=p.rotSpeed; p.vx*=0.99;}
+    if(p.type==='floatEmber'){p.vy+=p.gravity; p.vx*=0.98;}
+    if(p.life<=0) particles.splice(i,1);
+  }
+}
+
+function drawParticles(){
+  for(const p of particles){
+    ctx.save();
+    if(p.type==='ember'||p.type==='floatEmber'){
+      ctx.globalAlpha=p.life*0.95;
+      ctx.shadowBlur=p.type==='floatEmber'?12:6;
+      ctx.shadowColor=p.color;
+      ctx.fillStyle=p.color;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.size/2,0,Math.PI*2); ctx.fill();
+    } else {
+      ctx.globalAlpha=p.life*0.28;
+      ctx.translate(p.x,p.y); ctx.rotate(p.rot||0);
+      ctx.fillStyle=p.color;
+      ctx.beginPath(); ctx.arc(0,0,p.size/2,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// ══════════════════════════════════════════
+//  MINIMAP
+// ══════════════════════════════════════════
+function drawMinimap(){
+  const mm=mmCanvas, mc=mmCtx;
+  const sz=154, cs=sz/GRID;
+  mc.clearRect(0,0,sz,sz);
+  mc.fillStyle='#09111a';
+  mc.fillRect(0,0,sz,sz);
+  for(let r=0;r<GRID;r++){
+    for(let c=0;c<GRID;c++){
+      const x=c*cs, y=r*cs;
+      if(grid[r][c]===1){
+        mc.fillStyle='#2a3d55'; mc.fillRect(x,y,cs,cs);
+      } else if(fire.has(`${r},${c}`)){
+        mc.fillStyle='#ff4400'; mc.fillRect(x,y,cs,cs);
+      } else if((smoke.get(`${r},${c}`)||0)>2){
+        mc.fillStyle='rgba(100,100,110,0.5)'; mc.fillRect(x,y,cs,cs);
+      }
+    }
+  }
+  // Goal
+  mc.fillStyle='rgba(0,229,255,0.8)';
+  mc.fillRect(GOAL.c*cs, GOAL.r*cs, cs, cs);
+  // Path
+  mc.fillStyle='rgba(0,255,136,0.5)';
+  path.forEach(([pr,pc])=>mc.fillRect(pc*cs+1,pr*cs+1,cs-2,cs-2));
+  // Agent
+  mc.fillStyle='#ffffff';
+  mc.beginPath();
+  mc.arc(agent.c*cs+cs/2, agent.r*cs+cs/2, cs*0.9, 0, Math.PI*2);
+  mc.fill();
+  // Border
+  mc.strokeStyle='rgba(0,229,255,0.2)'; mc.lineWidth=0.5; mc.strokeRect(0,0,sz,sz);
+}
+
+// ══════════════════════════════════════════
+//  MAIN RENDER
+// ══════════════════════════════════════════
+function render(){
+  ctx.clearRect(0,0,W,H);
+
+  // Ambient fire glow on canvas if big fire
+  if(fire.size>10){
+    const glow=ctx.createRadialGradient(W/2,H/2,0,W/2,H/2,W*0.7);
+    glow.addColorStop(0,`rgba(255,80,0,${Math.min(0.07,fire.size*0.003)})`);
+    glow.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=glow; ctx.fillRect(0,0,W,H);
+  }
+
+  for(let r=0;r<GRID;r++){
+    for(let c=0;c<GRID;c++){
+      const pos=toIso(r,c);
+      drawFloor(pos.x,pos.y,r,c);
+      if(r===GOAL.r&&c===GOAL.c) drawGoal(pos.x,pos.y);
+      if(grid[r][c]===1) drawWall(pos.x,pos.y,r,c);
+
+      const key=`${r},${c}`;
+      if(fire.has(key)){
+        drawFireTile(pos.x,pos.y);
+        spawnFireParticles(pos.x,pos.y);
+        spawnEmber(pos.x,pos.y);
+      }
+      const sk=smoke.get(key)||0;
+      if(sk>0) spawnSmokeParticles(pos.x,pos.y,sk);
+
+      if(Math.round(agent.r)===r && Math.round(agent.c)===c){
+        drawAgent(pos.x,pos.y);
+      }
+    }
+  }
+
+  updateParticles();
+  drawParticles();
+
+  // Siren red flash overlay
+  if(running && fire.size>0){
+    const flashPhase=Math.sin(frameCount*0.08);
+    if(flashPhase>0.7){
+      ctx.fillStyle=`rgba(255,0,0,${(flashPhase-0.7)*0.06})`;
+      ctx.fillRect(0,0,W,H);
+    }
+  }
+
+  drawMinimap();
+}
+
+// ══════════════════════════════════════════
+//  FIRE SPREAD + SMOKE
+// ══════════════════════════════════════════
+const WIND_MAP={N:[-1,0],S:[1,0],E:[0,1],W:[0,-1]};
+const INT_MAP={low:0.018,med:0.05,high:0.14};
+
+function spreadFire(){
+  const wind=document.getElementById('wind').value;
+  const baseP=INT_MAP[document.getElementById('intensity').value];
+  const next=new Set(fire);
+
+  fire.forEach(f=>{
+    const [r,c]=f.split(',').map(Number);
+    [[1,0],[-1,0],[0,1],[0,-1]].forEach(d=>{
+      const nr=r+d[0], nc=c+d[1];
+      if(nr>0&&nr<GRID-1&&nc>0&&nc<GRID-1&&grid[nr][nc]===0&&!fire.has(`${nr},${nc}`)){
+        let p=baseP;
+        if(wind!=='none'&&WIND_MAP[wind]&&d[0]===WIND_MAP[wind][0]&&d[1]===WIND_MAP[wind][1]) p*=6;
+        if(Math.random()<p) next.add(`${nr},${nc}`);
+      }
+    });
+  });
+  fire=next;
+
+  // Smoke spreads from fire
+  fire.forEach(f=>{
+    const [r,c]=f.split(',').map(Number);
+    [[0,1],[0,-1],[1,0],[-1,0],[1,1],[-1,-1],[1,-1],[-1,1],[0,2],[2,0],[0,-2],[-2,0]].forEach(d=>{
+      const nr=r+d[0], nc=c+d[1];
+      if(nr>=0&&nr<GRID&&nc>=0&&nc<GRID&&grid[nr][nc]===0){
+        const k=`${nr},${nc}`;
+        smoke.set(k,Math.min(10,(smoke.get(k)||0)+0.25));
+      }
+    });
+  });
+}
+
+// ══════════════════════════════════════════
+//  PATHFINDING
+// ══════════════════════════════════════════
+function findPath(mode){
+  const queue=[[[1,1]]];
+  const vis=new Set(['1,1']);
+  while(queue.length>0){
+    if(mode==='astar') queue.sort((a,b)=>{
+      const [ar,ac]=a[a.length-1],[br,bc]=b[b.length-1];
+      return (Math.abs(ar-GOAL.r)+Math.abs(ac-GOAL.c))-(Math.abs(br-GOAL.r)+Math.abs(bc-GOAL.c));
+    });
+    const cur=queue.shift();
+    const [r,c]=cur[cur.length-1];
+    if(r===GOAL.r&&c===GOAL.c) return cur;
+    [[0,1],[0,-1],[1,0],[-1,0]].forEach(d=>{
+      const nr=r+d[0],nc=c+d[1],k=`${nr},${nc}`;
+      if(nr>=0&&nr<GRID&&nc>=0&&nc<GRID&&grid[nr][nc]===0&&!vis.has(k)){
+        vis.add(k); queue.push([...cur,[nr,nc]]);
+      }
+    });
+  }
+  return [];
+}
+
+// ══════════════════════════════════════════
+//  TELEMETRY UPDATE
+// ══════════════════════════════════════════
+function updateTelem(status,cls){
+  const el=document.getElementById('t-time');
+  el.innerHTML=`<span class="lbl">ELAPSED</span><span class="val">${running?((performance.now()-startTime)/1000).toFixed(1):0}s</span>`;
+  document.getElementById('t-fire').innerHTML=`<span class="lbl">FIRE CELLS</span><span class="val">${fire.size}</span>`;
+  document.getElementById('t-fire').className='trow'+(fire.size>0?' fire':'');
+  document.getElementById('t-smoke').innerHTML=`<span class="lbl">SMOKE CELLS</span><span class="val">${smoke.size}</span>`;
+  document.getElementById('t-steps').innerHTML=`<span class="lbl">STEPS LEFT</span><span class="val">${path.length||'—'}</span>`;
+  const st=document.getElementById('t-status');
+  st.innerHTML=`<span class="lbl">STATUS</span><span class="val">${status}</span>`;
+  st.className='trow '+(cls||'');
+}
+
+// Animated VU meter
+function updateVU(){
+  for(let i=0;i<8;i++){
+    const bar=document.getElementById(`vb${i}`);
+    if(!bar) continue;
+    let h=2;
+    if(running && fire.size>0){
+      h=4+Math.abs(Math.sin(frameCount*0.12+i*0.8))*(4+i*1.5)*Math.min(1,fire.size/10);
+      bar.style.background=h>12?'#ff3333':h>7?'#ff8c00':'rgba(0,229,255,0.5)';
+    } else {
+      bar.style.background='rgba(0,229,255,0.2)';
+    }
+    bar.style.height=h+'px';
+  }
+}
+
+// ══════════════════════════════════════════
+//  CONTROLS
+// ══════════════════════════════════════════
+function initSim(){
+  initAudio();
+  resetSim(true);
+  const p=findPath(document.getElementById('algo').value);
+  if(!p.length){alert('No path found to exit!');return;}
+  path=p.slice(1);
+  fire.add('10,10'); fire.add('10,11'); fire.add('11,10'); fire.add('9,10');
+  running=true; startTime=performance.now(); paFired=false;
+  document.getElementById('fireBtn').disabled=false;
+
+  // Start audio
+  startSiren();
+  startFireCrackle();
+  alarmInterval=setInterval(()=>{if(!muted)playAlarmBeep();},2200);
+
+  // PA announcement after short delay
+  setTimeout(()=>{
+    if(!muted) playPAVoice('Attention. Fire has been detected. All personnel must evacuate immediately. Do not use elevators. Proceed to the nearest emergency exit.');
+  },1200);
+
+  updateTelem('EVACUATING','warn');
+}
+
+function placeFire(){
+  initAudio();
+  if(!running) return;
+  const r=Math.floor(Math.random()*(GRID-4))+2;
+  const c=Math.floor(Math.random()*(GRID-4))+2;
+  if(grid[r][c]===0){fire.add(`${r},${c}`);}
+  if(!muted) playAlarmBeep();
+}
+
+function resetSim(keepRunning){
+  if(!keepRunning){
+    stopSiren(); stopFireCrackle();
+    if(alarmInterval){clearInterval(alarmInterval);alarmInterval=null;}
+    speechSynthesis && speechSynthesis.cancel();
+    document.getElementById('fireBtn').disabled=true;
+  }
+  running=false; fire=new Set(); smoke=new Map(); particles=[]; path=[];
+  agent={r:1,c:1,walkCycle:0};
+  document.getElementById('status').style.display='none';
+  createMap(document.getElementById('mapType').value);
+  updateTelem('STANDBY','');
+}
+
+function showResult(txt, color, audioFn){
+  stopSiren(); stopFireCrackle();
+  if(alarmInterval){clearInterval(alarmInterval);alarmInterval=null;}
+  speechSynthesis&&speechSynthesis.cancel();
+  const el=document.getElementById('status');
+  el.style.display='block';
+  el.innerHTML=`<h1 style="color:${color};text-shadow:0 0 60px ${color}60,0 0 120px ${color}30">${txt}</h1><p style="color:rgba(255,255,255,0.3)">PRESS HARD RESET TO RETRY</p>`;
+  if(audioFn&&!muted) audioFn();
+  setTimeout(()=>{
+    if(!muted){
+      const msg=txt.includes('EVAC')?'Evacuation successful. All personnel accounted for.':'Agent overcome. Evacuation failed.';
+      playPAVoice(msg);
+    }
+  },500);
+}
+
+// ══════════════════════════════════════════
+//  GAME LOOP
+// ══════════════════════════════════════════
+function update(){
+  if(running){
+    const spd=parseInt(document.getElementById('speed').value);
+    if(frameCount%Math.max(1,21-spd)===0){
+      if(path.length>0){
+        const [nr,nc]=path.shift();
+        agent.r=nr; agent.c=nc;
+        agent.walkCycle+=1.0;
+
+        const key=`${nr},${nc}`;
+        if(fire.has(key)){
+          running=false;
+          showResult('AGENT LOST','#ff2d2d',playFail);
+          updateTelem('DECEASED','fire');
+        } else if(nr===GOAL.r&&nc===GOAL.c){
+          running=false;
+          showResult('EVACUATED','#00e5ff',playSuccess);
+          updateTelem('SAFE','safe');
+        }
+
+        // Near-miss PA
+        const nearFire=[...fire].some(f=>{const[fr,fc]=f.split(',').map(Number);return Math.abs(fr-nr)+Math.abs(fc-nc)===1;});
+        if(nearFire && !paFired && !muted){
+          paFired=true;
+          setTimeout(()=>playPAVoice('Warning! Fire is approaching your position. Move faster!'),100);
+        }
+      }
+      if(Math.random()<0.35) spreadFire();
+    }
+    updateTelem(running?'EVACUATING':'STANDBY',running?'warn':'');
+  }
+
+  updateVU();
+  render();
+  frameCount++;
+  requestAnimationFrame(update);
+}
+
+// ══════════════════════════════════════════
+//  INPUT
+// ══════════════════════════════════════════
+simCanvas.addEventListener('mousedown',e=>{isDrag=true;lastM={x:e.clientX,y:e.clientY};});
+window.addEventListener('mouseup',()=>isDrag=false);
+window.addEventListener('mousemove',e=>{
+  if(isDrag){camX+=e.clientX-lastM.x;camY+=e.clientY-lastM.y;lastM={x:e.clientX,y:e.clientY};}
+});
+window.addEventListener('wheel',e=>{camY-=e.deltaY*0.4;});
+
+// ══════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════
+resize();
+window.addEventListener('resize',resize);
+createMap('mall');
+update();
+</script>
+</body>
+</html>
